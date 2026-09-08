@@ -9,6 +9,12 @@ repositories {
     mavenCentral()
 }
 
+sourceSets {
+    create("practice") {
+        kotlin.srcDir("src/main/practice")
+    }
+}
+
 dependencies {
     testImplementation(kotlin("test"))
 }
