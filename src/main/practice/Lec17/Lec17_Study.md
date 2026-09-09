@@ -105,7 +105,8 @@ val isApple1: (Fruit) -> Boolean = fun(fruit: Fruit): Boolean {
 val isApple2: (Fruit) -> Boolean = { fruit: Fruit -> fruit.name == "사과" }
 ```
 
-### (4) 변수에 할당된 함수를 호출하는 두 가지 방법
+### (4) 변수에 할당된 함수 호출: 직접 호출(`fn()`) vs `.invoke()` 심층 비교
+
 ```kotlin
 // 1. 일반 함수처럼 소괄호로 직접 호출
 val r1 = isApple1(apple)
@@ -113,7 +114,63 @@ val r1 = isApple1(apple)
 // 2. 함수 객체의 invoke() 메서드를 통해 명시적 호출
 val r2 = isApple2.invoke(apple)
 ```
-> 💡 **참고**: `isApple(apple)`을 실행하면 코틀린 컴파일러는 내부적으로 `isApple.invoke(apple)`을 호출합니다.
+
+#### 1) 내부 동작 원리와 바이트코드 (Under the Hood)
+코틀린에서 모든 함수 타입(예: `(Fruit) -> Boolean`)은 내부적으로 JVM의 **`kotlin.jvm.functions.FunctionN`** 인터페이스(예: `Function1`, `Function2` 등)로 구현되며, 이 인터페이스들은 공통적으로 **`operator fun invoke(...)`** 메서드를 정의하고 있습니다.
+
+- **`fn(x)`**: 코틀린의 **연산자 오버로딩 관례(Operator Overloading Convention)**에 따라 컴파일러가 `fn.invoke(x)`로 자동 치환하는 **문법적 설탕(Syntactic Sugar)**입니다.
+- **`fn.invoke(x)`**: 함수 인터페이스에 선언된 `invoke` 메서드를 명시적으로 호출하는 형태입니다.
+- **바이트코드 분석**: 두 방식 모두 컴파일 시 `invokeinterface kotlin/jvm/functions/Function1.invoke` 바이트코드로 동일하게 변환되므로 **실행 성능상의 차이는 0%**입니다.
+
+#### 2) 실제 차이가 발생하는 결정적인 3가지 상황
+동일하게 컴파일됨에도 불구하고 `.invoke()` 문법이 코틀린에 별도로 존재하고 실무에서 널리 쓰이는 이유는 다음 3가지 상황 때문입니다:
+
+1. **Nullable 함수 타입의 안전 호출 (`?.invoke()`) — ★ 가장 대표적**
+   - 함수 변수가 `null`일 수 있는 경우(`((String) -> Unit)?`), 직접 호출 문법 앞에는 Safe-call(`?.`)을 직접 붙일 수 없습니다(`fn?("hello")`는 문법 에러).
+   - 따라서 null이 아닐 때만 안전하게 실행하려면 반드시 **`fn?.invoke("hello")`** 구문을 사용해야 합니다.
+   ```kotlin
+   val onClick: ((String) -> Unit)? = null
+
+   // ❌ 컴파일 에러! (소괄호 앞에 ? 연산자를 직접 붙일 수 없음)
+   // onClick?("item_1")
+
+   // ⭕ 올바른 관용구: safe-call과 invoke 연계
+   onClick?.invoke("item_1")
+
+   // (참고: invoke를 쓰지 않으려면 아래처럼 if문으로 감싸야 함)
+   if (onClick != null) {
+       onClick("item_1")
+   }
+   ```
+
+2. **멤버 메서드와 함수 프로퍼티의 이름 충돌 (Shadowing)**
+   - 클래스 내에 동일한 이름의 **멤버 메서드**와 **함수 타입 프로퍼티**가 공존하는 경우, 소괄호 직접 호출(`execute()`)을 사용하면 코틀린 컴파일러는 항상 **멤버 메서드를 최우선으로 바인딩**합니다.
+   - 이때 람다 프로퍼티를 실행하려면 반드시 **`execute.invoke()`**를 명시해야 합니다.
+   ```kotlin
+   class ActionHandler {
+       // 1. 함수 타입 프로퍼티
+       val execute: () -> Unit = { println("람다 프로퍼티 실행") }
+
+       // 2. 동일한 이름의 멤버 메서드
+       fun execute() {
+           println("멤버 메서드 실행")
+       }
+
+       fun run() {
+           execute()          // 👉 항상 "멤버 메서드"가 호출됨
+           this.execute()     // 👉 여전히 "멤버 메서드"가 호출됨
+
+           execute.invoke()   // 👉 명시적으로 "람다 프로퍼티"를 실행!
+       }
+   }
+   ```
+
+3. **함수를 반환하는 고차 함수의 연쇄 호출 가독성**
+   - 람다를 반환하는 고차 함수를 호출한 뒤 반환된 함수를 즉시 실행할 때, `getMultiplier(3)(10)`처럼 소괄호가 연속되는 것보다 `getMultiplier(3).invoke(10)` 형태로 작성하면 "함수를 얻어온 후 실행한다"는 의도를 명확히 드러낼 수 있습니다.
+
+#### 3) 요약 및 권장 스타일
+- **Non-null 함수**: 더 간결하고 자연스러운 **직접 호출(`fn()`)**을 사용하는 것이 코틀린 관용구(Idiom)입니다.
+- **Nullable 함수**: 널 안전성을 보장하기 위해 **`fn?.invoke()`**를 사용하는 것이 필수적인 표준 패턴입니다.
 
 ### (5) 단일 파라미터의 특권: `it`
 람다식의 매개변수가 단 **하나**뿐이라면, 매개변수 선언부(`fruit ->`)를 완전히 생략하고 암시적 예약어인 **`it`**을 사용할 수 있습니다:
@@ -375,7 +432,7 @@ private fun calculateFinalAmount(
 | **람다 반환값** | 명시적 `return` 필요 | **마지막 라인의 평가 결과가 반환값** (return 지양) |
 | **외부 변수 참조** | `final` 또는 `effectively final`만 가능 | **`var` 가변 변수도 자유롭게 포획 및 수정 가능 (클로저)** |
 | **자원 관리** | `try (Resource r = ...) { ... }` 문법 구문 | **`resource.use { r -> ... }`** (고차 확장 함수) |
-| **함수 호출 방식** | `func.apply(x)` | **`func(x)`** 또는 **`func.invoke(x)`** |
+| **함수 호출 방식** | `func.apply(x)` | 일반 호출: **`func(x)`** / Null-safe 호출: **`func?.invoke(x)`** |
 
 ---
 
