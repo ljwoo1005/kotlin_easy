@@ -49,19 +49,16 @@ data class Quiz17Fruit(
 
 // 1. 비싼 과일 판별 람다 변수 뼈대
 private val isExpensiveFruit: (Quiz17Fruit) -> Boolean = {
-    // TODO: 여기에 코드를 작성하세요
     TODO()
 }
 
 // 2. 두 정수와 연산 함수를 받아 실행하는 고차 함수 뼈대
 private fun calculate(a: Int, b: Int, operation: (Int, Int) -> Int): Int {
-    // TODO: 여기에 코드를 작성하세요
     TODO()
 }
 
 // 3. 람다를 소괄호 및 invoke 두 가지 방식으로 호출하는 함수 뼈대
 private fun executeTwice(message: String, action: (String) -> String): Pair<String, String> {
-    // TODO: 여기에 코드를 작성하세요
     TODO()
 }
 
